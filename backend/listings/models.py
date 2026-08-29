@@ -7,8 +7,6 @@ class Faculty(models.Model):
 
     name = models.CharField(max_length=200)
     address = models.CharField(max_length=300, blank=True)
-    # geography=True stores this as a PostGIS geography(Point,4326),
-    # so distance calculations return real metres, not degrees.
     geom = models.PointField(geography=True, srid=4326)
 
     class Meta:
@@ -32,8 +30,6 @@ class BoardingHouse(models.Model):
     price_min = models.PositiveIntegerField(help_text="Monthly price, lower bound")
     price_max = models.PositiveIntegerField(help_text="Monthly price, upper bound")
     room_type = models.CharField(max_length=20, choices=ROOM_TYPE_CHOICES, blank=True)
-    # Stored as JSON lists so we don't need a separate Facility model for
-    # a project of this scope; still queryable with JSONField lookups.
     facilities = models.JSONField(default=list, blank=True, help_text='e.g. ["wifi", "ac", "parkir"]')
     photos = models.JSONField(default=list, blank=True, help_text="List of image URLs")
     contact = models.CharField(max_length=100, blank=True)
@@ -51,21 +47,14 @@ class BoardingHouse(models.Model):
 
 class RoadSegment(models.Model):
     CONDITION_CHOICES = [
-        ("good", "Good"),
         ("fair", "Fair"),
         ("poor", "Poor"),
     ]
 
     name = models.CharField(max_length=200, blank=True)
-    condition = models.CharField(max_length=10, choices=CONDITION_CHOICES, default="good")
+    condition = models.CharField(max_length=10, choices=CONDITION_CHOICES)
     notes = models.TextField(blank=True)
     reported_by = models.CharField(max_length=150, blank=True)
-    # Generic GeometryField rather than a strict LineStringField: a road
-    # "segment" report can be a single point (e.g. one pothole - no
-    # sensible start/end) or a LineString/MultiLineString (a stretch of
-    # road, possibly with a branch at a junction). PostGIS and GeoDjango's
-    # spatial lookups (dwithin, Distance, etc.) work the same regardless
-    # of which of these it actually is.
     geom = models.GeometryField(geography=True, srid=4326)
     updated_at = models.DateTimeField(auto_now=True)
 

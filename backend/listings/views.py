@@ -138,7 +138,7 @@ class BoardingHouseRecommendedView(APIView):
                 .order_by("d")
                 .first()
             )
-            return nearest.condition if nearest else None
+            return nearest.condition if nearest else "good"
 
         avg_prices = [(r.price_min + r.price_max) / 2 for r in rows]
         max_avg_price = max(avg_prices) or 1
@@ -149,7 +149,7 @@ class BoardingHouseRecommendedView(APIView):
             road_condition = nearest_road_condition(r)
             distance_score = max(0, 1 - (distance_m / 2000.0))
             price_score = 1 - (avg_price / max_avg_price)
-            road_score = ROAD_CONDITION_SCORE.get(road_condition, 0.5)
+            road_score = ROAD_CONDITION_SCORE.get(road_condition, 1.0)
             suitability = round(distance_score * 0.5 + price_score * 0.25 + road_score * 0.25, 4)
 
             results.append(
@@ -235,7 +235,7 @@ class RouteView(APIView):
 
         nearby_segments = RoadSegment.objects.filter(geom__dwithin=(route_line, D(m=25)))
 
-        counts = {"good": 0, "fair": 0, "poor": 0}
+        counts = {"fair": 0, "poor": 0}
         overlay = []
         for seg in nearby_segments:
             counts[seg.condition] += 1
@@ -253,10 +253,8 @@ class RouteView(APIView):
             overall = "poor"
         elif counts["fair"] > 0:
             overall = "fair"
-        elif overlay:
-            overall = "good"
         else:
-            overall = "unknown"
+            overall = "good"
 
         # Best-effort cache upsert
         RouteCache.objects.update_or_create(

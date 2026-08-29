@@ -1,0 +1,22 @@
+version: "3.8"
+
+# Spins up a local PostgreSQL + PostGIS database for development.
+# Run:  docker compose up -d
+# Then: cd backend && npm run migrate && npm run seed
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: kostfinder_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kostfinder
+      POSTGRES_USER: kostfinder_user
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - kostfinder_pgdata:/var/lib/postgresql/data
+
+volumes:
+  kostfinder_pgdata:

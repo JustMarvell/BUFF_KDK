@@ -60,9 +60,11 @@ export default function MapView({
   return (
     <MapContainer center={center} zoom={zoom} className="map-container" scrollWheelZoom>
       <TileLayer
-        // Free OpenStreetMap tiles - no API key required.
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        // CARTO's free raster tiles (OSM data underneath)
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=cb1_2iwa_1_e4fa6c20614118fac484d0eb"
+        subdomains="abcd"
+        maxZoom={20}
       />
 
       {roadSegments && (

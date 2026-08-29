@@ -85,7 +85,11 @@ class RoadSegmentGeoJSONSerializer(serializers.ModelSerializer):
 
 
 class RoadSegmentCreateSerializer(serializers.ModelSerializer):
-    """Accepts a list of [lng, lat] points from clients and builds the LineStringField."""
+    """
+    Accepts a list of [lng, lat] points from clients and builds either a
+    Point (single-spot issue, e.g. a pothole - just one pair of
+    coordinates) or a LineString (a road stretch - two or more points).
+    """
 
     points = serializers.ListField(child=serializers.ListField(child=serializers.FloatField()), write_only=True)
 
@@ -94,10 +98,13 @@ class RoadSegmentCreateSerializer(serializers.ModelSerializer):
         fields = ["name", "condition", "notes", "reported_by", "points"]
 
     def create(self, validated_data):
-        from django.contrib.gis.geos import LineString
+        from django.contrib.gis.geos import LineString, Point
 
         points = validated_data.pop("points")
-        if len(points) < 2:
-            raise serializers.ValidationError("points must contain at least 2 [lng, lat] pairs")
-        validated_data["geom"] = LineString([(p[0], p[1]) for p in points], srid=4326)
+        if len(points) < 1:
+            raise serializers.ValidationError("points must contain at least 1 [lng, lat] pair")
+        if len(points) == 1:
+            validated_data["geom"] = Point(points[0][0], points[0][1], srid=4326)
+        else:
+            validated_data["geom"] = LineString([(p[0], p[1]) for p in points], srid=4326)
         return RoadSegment.objects.create(**validated_data)

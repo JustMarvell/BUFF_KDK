@@ -60,7 +60,13 @@ class RoadSegment(models.Model):
     condition = models.CharField(max_length=10, choices=CONDITION_CHOICES, default="good")
     notes = models.TextField(blank=True)
     reported_by = models.CharField(max_length=150, blank=True)
-    geom = models.LineStringField(geography=True, srid=4326)
+    # Generic GeometryField rather than a strict LineStringField: a road
+    # "segment" report can be a single point (e.g. one pothole - no
+    # sensible start/end) or a LineString/MultiLineString (a stretch of
+    # road, possibly with a branch at a junction). PostGIS and GeoDjango's
+    # spatial lookups (dwithin, Distance, etc.) work the same regardless
+    # of which of these it actually is.
+    geom = models.GeometryField(geography=True, srid=4326)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

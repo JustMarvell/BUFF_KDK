@@ -7,8 +7,8 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark">KostDekatKampus</span>
-          <span className="brand-tag">cari kost dekat lokasi kampus</span>
+          <span className="brand-mark">KostFinder</span>
+          <span className="brand-tag">boarding houses near campus</span>
         </div>
       </header>
 

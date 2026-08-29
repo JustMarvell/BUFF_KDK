@@ -33,7 +33,7 @@ function FitBounds({ points }) {
 }
 
 export default function MapView({
-  center = [1.4748, 124.8421],
+  center = [1.26667, 124.88306], // Universitas Negeri Manado (UNIMA), Tondano
   zoom = 15,
   boardingHouses = [],
   faculties = [],
@@ -70,10 +70,20 @@ export default function MapView({
           key={JSON.stringify(roadSegments.features.map((f) => f.properties.id))}
           data={roadSegments}
           style={roadStyle}
+          pointToLayer={(feature, latlng) =>
+            L.circleMarker(latlng, {
+              radius: 8,
+              color: "#fff",
+              weight: 2,
+              fillColor: CONDITION_COLOR[feature.properties.condition] || "#888",
+              fillOpacity: 0.9,
+            })
+          }
           onEachFeature={(feature, layer) => {
             const { name, condition, notes } = feature.properties;
+            const kind = feature.geometry.type === "Point" ? "Reported spot" : "Road segment";
             layer.bindPopup(
-              `<strong>${name || "Road segment"}</strong><br/>Condition: ${condition}${
+              `<strong>${name || kind}</strong><br/>Condition: ${condition}${
                 notes ? `<br/><em>${notes}</em>` : ""
               }`
             );

@@ -33,6 +33,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -62,9 +63,19 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# ---------------------------------------------------------------------
 # Database - PostgreSQL + PostGIS via GeoDjango's spatial backend
-# ---------------------------------------------------------------------
+
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.contrib.gis.db.backends.postgis",
+#         "NAME": os.getenv("PGDATABASE", "kostfinder"),
+#         "USER": os.getenv("PGUSER", "kostfinder_user"),
+#         "PASSWORD": os.getenv("PGPASSWORD", "changeme"),
+#         "HOST": os.getenv("PGHOST", "localhost"),
+#         "PORT": os.getenv("PGPORT", "5432"),
+#     }
+# }
+
 DATABASES = {
     "default": {
         "ENGINE": "django.contrib.gis.db.backends.postgis",
@@ -73,6 +84,7 @@ DATABASES = {
         "PASSWORD": os.getenv("PGPASSWORD", "changeme"),
         "HOST": os.getenv("PGHOST", "localhost"),
         "PORT": os.getenv("PGPORT", "5432"),
+        "OPTIONS": {"sslmode": os.getenv("PGSSLMODE", "prefer")},
     }
 }
 
@@ -89,7 +101,29 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Render terminates HTTPS and forwards requests as plain HTTP internally -
+# without this, Django can't tell the original request was secure, which
+# breaks CSRF and secure-cookie behavior.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Required for Django admin login (and any POST) to work once DEBUG=False -
+# Django refuses cross-origin-looking POSTs unless the origin is explicitly
+# trusted. Set via env so this doesn't need a code change per deployment.
+CSRF_TRUSTED_ORIGINS = [
+    o for o in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o
+]
 
 # ---------------------------------------------------------------------
 # CORS - allow the Vite dev server (and your deployed web app) to call

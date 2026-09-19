@@ -129,7 +129,7 @@ export default function BoardingHouseDetail() {
 
       <div style={{ height: 420, borderRadius: "var(--radius)", overflow: "hidden", border: "1px solid var(--color-border)" }}>
         <MapView
-          center={[bh.lat, bh.lng]}
+          center={{ lat: bh.lat, lng: bh.lng }}
           zoom={15}
           boardingHouses={[bh]}
           faculties={selectedFaculty ? [selectedFaculty] : []}

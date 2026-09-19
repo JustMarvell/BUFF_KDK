@@ -1,130 +1,111 @@
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON, Polyline, useMap } from "react-leaflet";
-import L from "leaflet";
-import { useEffect } from "react";
-
-// Leaflet's default marker icons reference image files that don't resolve
-// correctly under bundlers like Vite - rebuild them from the CDN instead.
-const houseIcon = new L.Icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-});
-
-const facultyIcon = new L.DivIcon({
-  className: "faculty-marker",
-  html: `<div style="background:#2f5d50;border:2px solid white;width:16px;height:16px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,
-  iconSize: [16, 16],
-  iconAnchor: [8, 8],
-});
+import { useEffect, useMemo } from "react";
+import { APIProvider, Map, AdvancedMarker, Pin, Polyline, useMap } from "@vis.gl/react-google-maps";
 
 const CONDITION_COLOR = { good: "#3c8f5c", fair: "#d9a441", poor: "#c1483e" };
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 function FitBounds({ points }) {
   const map = useMap();
   useEffect(() => {
-    if (!points || !points.length) return;
-    const bounds = L.latLngBounds(points.map(([lat, lng]) => [lat, lng]));
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
-  }, [points, map]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!map || !points || !points.length) return;
+    const bounds = new window.google.maps.LatLngBounds();
+    points.forEach(([lat, lng]) => bounds.extend({ lat, lng }));
+    map.fitBounds(bounds, 60);
+  }, [map, points]);
   return null;
 }
 
+function RoadSegmentLayer({ roadSegments }) {
+  if (!roadSegments) return null;
+  return roadSegments.features.map((feature) => {
+    const { id, name, condition, notes } = feature.properties;
+    const color = CONDITION_COLOR[condition] || "#888888";
+    const geom = feature.geometry;
+
+    if (geom.type === "Point") {
+      const [lng, lat] = geom.coordinates;
+      return (
+        <AdvancedMarker
+          key={`road-${id}`}
+          position={{ lat, lng }}
+          title={`${name || "Reported spot"} - ${condition}${notes ? `: ${notes}` : ""}`}
+        >
+          <Pin background={color} borderColor="#fff" glyphColor="#fff" scale={0.8} />
+        </AdvancedMarker>
+      );
+    }
+    if (geom.type === "LineString") {
+      const path = geom.coordinates.map(([lng, lat]) => ({ lat, lng }));
+      return <Polyline key={`road-${id}`} path={path} strokeColor={color} strokeWeight={5} strokeOpacity={0.8} />;
+    }
+    if (geom.type === "MultiLineString") {
+      return geom.coordinates.map((line, i) => {
+        const path = line.map(([lng, lat]) => ({ lat, lng }));
+        return <Polyline key={`road-${id}-${i}`} path={path} strokeColor={color} strokeWeight={5} strokeOpacity={0.8} />;
+      });
+    }
+    return null;
+  });
+}
+
 export default function MapView({
-  center = [1.26667, 124.88306], // Universitas Negeri Manado (UNIMA), Tondano
+  center = { lat: 1.26667, lng: 124.88306 }, // Universitas Negeri Manado (UNIMA), Tondano
   zoom = 15,
   boardingHouses = [],
   faculties = [],
   roadSegments,
   routeGeometry,
-  selectedId,
   onSelectBoardingHouse,
   fitToMarkers = false,
 }) {
-  const roadStyle = (feature) => ({
-    color: CONDITION_COLOR[feature.properties.condition] || "#888",
-    weight: 5,
-    opacity: 0.75,
-  });
+  const fitPoints = useMemo(() => {
+    if (!fitToMarkers) return null;
+    return [
+      ...boardingHouses.map((b) => [b.lat, b.lng]),
+      ...faculties.map((f) => [f.lat, f.lng]),
+    ];
+  }, [fitToMarkers, boardingHouses, faculties]);
 
-  const routeLatLngs = routeGeometry
-    ? routeGeometry.coordinates.map(([lng, lat]) => [lat, lng])
+  const routePath = routeGeometry
+    ? routeGeometry.coordinates.map(([lng, lat]) => ({ lat, lng }))
     : null;
 
-  const fitPoints = fitToMarkers
-    ? [...boardingHouses.map((b) => [b.lat, b.lng]), ...faculties.map((f) => [f.lat, f.lng])]
-    : null;
+  if (!GOOGLE_MAPS_API_KEY) {
+    return <div style={{ padding: 16 }}>Missing VITE_GOOGLE_MAPS_API_KEY - check web/.env.</div>;
+  }
 
   return (
-    <MapContainer center={center} zoom={zoom} className="map-container" scrollWheelZoom>
-      <TileLayer
-        // CARTO's free raster tiles (OSM data underneath)
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-        url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=cb1_2iwa_1_e4fa6c20614118fac484d0eb"
-        subdomains="abcd"
-        maxZoom={20}
-      />
+    <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
+      <Map
+        defaultCenter={center}
+        defaultZoom={zoom}
+        mapId="DEMO_MAP_ID"
+        className="map-container"
+        gestureHandling="greedy"
+      >
+        <RoadSegmentLayer roadSegments={roadSegments} />
 
-      {roadSegments && (
-        <GeoJSON
-          key={JSON.stringify(roadSegments.features.map((f) => f.properties.id))}
-          data={roadSegments}
-          style={roadStyle}
-          pointToLayer={(feature, latlng) =>
-            L.circleMarker(latlng, {
-              radius: 8,
-              color: "#fff",
-              weight: 2,
-              fillColor: CONDITION_COLOR[feature.properties.condition] || "#888",
-              fillOpacity: 0.9,
-            })
-          }
-          onEachFeature={(feature, layer) => {
-            const { name, condition, notes } = feature.properties;
-            const kind = feature.geometry.type === "Point" ? "Reported spot" : "Road segment";
-            layer.bindPopup(
-              `<strong>${name || kind}</strong><br/>Condition: ${condition}${
-                notes ? `<br/><em>${notes}</em>` : ""
-              }`
-            );
-          }}
-        />
-      )}
+        {routePath && (
+          <Polyline path={routePath} strokeColor="#2f5d50" strokeWeight={5} strokeOpacity={0.9} />
+        )}
 
-      {routeLatLngs && <Polyline positions={routeLatLngs} pathOptions={{ color: "#2f5d50", weight: 5, opacity: 0.9 }} />}
+        {faculties.map((f) => (
+          <AdvancedMarker key={`fac-${f.id}`} position={{ lat: f.lat, lng: f.lng }} title={f.name}>
+            <Pin background="#2f5d50" borderColor="#fff" glyphColor="#fff" />
+          </AdvancedMarker>
+        ))}
 
-      {faculties.map((f) => (
-        <Marker key={`fac-${f.id}`} position={[f.lat, f.lng]} icon={facultyIcon}>
-          <Popup>
-            <div className="popup-title">{f.name}</div>
-            {f.address && <div>{f.address}</div>}
-          </Popup>
-        </Marker>
-      ))}
+        {boardingHouses.map((b) => (
+          <AdvancedMarker
+            key={`bh-${b.id}`}
+            position={{ lat: b.lat, lng: b.lng }}
+            title={`${b.name} - Rp ${b.price_min?.toLocaleString("id-ID")}-${b.price_max?.toLocaleString("id-ID")}`}
+            onClick={() => onSelectBoardingHouse && onSelectBoardingHouse(b.id)}
+          />
+        ))}
 
-      {boardingHouses.map((b) => (
-        <Marker
-          key={`bh-${b.id}`}
-          position={[b.lat, b.lng]}
-          icon={houseIcon}
-          eventHandlers={{ click: () => onSelectBoardingHouse && onSelectBoardingHouse(b.id) }}
-        >
-          <Popup>
-            <div className="popup-title">{b.name}</div>
-            <div>Rp {b.price_min?.toLocaleString("id-ID")} – {b.price_max?.toLocaleString("id-ID")} /mo</div>
-            {b.distance_m != null && <div>{(b.distance_m / 1000).toFixed(2)} km from selected faculty</div>}
-            <div className="popup-actions">
-              <a className="btn" href={`/boarding-houses/${b.id}`}>
-                Details
-              </a>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-
-      {fitToMarkers && fitPoints && fitPoints.length > 0 && <FitBounds points={fitPoints} />}
-    </MapContainer>
+        {fitToMarkers && fitPoints && fitPoints.length > 0 && <FitBounds points={fitPoints} />}
+      </Map>
+    </APIProvider>
   );
 }

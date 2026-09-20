@@ -1,0 +1,36 @@
+{% extends "admin/change_form.html" %}
+
+{% block after_field_sets %}
+{{ block.super }}
+<script id="road-nodes-data" type="application/json">{{ road_nodes_json|safe }}</script>
+<script>
+(function () {
+  function init() {
+    var dataEl = document.getElementById("road-nodes-data");
+    if (!dataEl) return;
+    var nodes = {};
+    JSON.parse(dataEl.textContent).forEach(function (n) { nodes[n.id] = n; });
+
+    [document.getElementById("id_from_node"), document.getElementById("id_to_node")].forEach(function (select) {
+      if (!select) return;
+      Array.from(select.options).forEach(function (opt) {
+        var node = nodes[opt.value];
+        if (node) {
+          opt.dataset.lat = node.lat;
+          opt.dataset.lng = node.lng;
+        }
+      });
+      // Fire once on load so a pre-filled dropdown (editing an existing
+      // edge) shows its preview immediately too.
+      select.dispatchEvent(new Event("change"));
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+{% endblock %}

@@ -1,50 +1,36 @@
 from django import forms
+from django.conf import settings
 
 # Real coordinates for Universitas Negeri Manado (UNIMA), Tondano campus.
-# Used as the default map center so admins don't start out looking at
-# the middle of the Atlantic Ocean.
 UNIMA_LAT = 1.26667
 UNIMA_LNG = 124.88306
 DEFAULT_ZOOM = 16
 
 
-class BaseLeafletGeometryWidget(forms.Textarea):
+class BaseGoogleMapsGeometryWidget(forms.Textarea):
     """
-    Renders a Leaflet map (same library as the public web app) for
-    editing a GeoDjango geometry field, instead of Django's default
-    admin widget (which uses an old bundled OpenLayers build and
-    always opens centered on the whole world map).
-
-    The underlying form value is a GeoJSON string written into a
-    hidden <textarea> by JS - GeoDjango's GeometryField.to_python()
-    accepts GeoJSON strings natively via GEOSGeometry(), so no custom
-    field/form-cleaning code is needed on the Python side.
+    Renders a Google Maps-based editor for a GeoDjango geometry field,
+    replacing Django's default admin widget. Same underlying approach as
+    before: JS writes a GeoJSON string into a hidden <textarea>, which
+    GeoDjango's GeometryField.to_python() parses natively via GEOSGeometry().
 
     Subclasses set `mode`:
       - "point": exactly one marker, click-to-place or drag to move.
-      - "road":  a marker (single-point issue, e.g. a pothole) OR one
-                 or more polylines (a road path; drawing the line tool
-                 more than once adds a branch, serialized as a
-                 MultiLineString).
+      - "road":  a marker (single-point issue) OR one or more polylines
+                 (a road path; drawing the polyline tool more than once
+                 adds a branch, serialized as a MultiLineString).
     """
 
     mode = "point"
-    template_name = "listings/widgets/leaflet_geom_widget.html"
+    template_name = "listings/widgets/gmaps_geom_widget.html"
 
     class Media:
-        css = {
-            "all": (
-                "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
-                "https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css",
-            )
-        }
         js = (
-            "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
-            "https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js",
+            f"https://maps.googleapis.com/maps/api/js?key={settings.GOOGLE_MAPS_API_KEY}&libraries=places,drawing",
         )
 
     def __init__(self, attrs=None, default_lat=UNIMA_LAT, default_lng=UNIMA_LNG, default_zoom=DEFAULT_ZOOM):
-        widget_attrs = {"class": "leaflet-geom-widget-textarea", "style": "display:none;"}
+        widget_attrs = {"class": "gmaps-geom-widget-textarea", "style": "display:none;"}
         if attrs:
             widget_attrs.update(attrs)
         super().__init__(widget_attrs)
@@ -55,9 +41,6 @@ class BaseLeafletGeometryWidget(forms.Textarea):
     def get_context(self, name, value, attrs):
         context = super().get_context(name, value, attrs)
         if value not in (None, ""):
-            # `value` is a GEOSGeometry instance when redisplaying a
-            # saved object or after a validation error; a plain string
-            # (already GeoJSON) is possible too in edge cases.
             geojson_value = value.geojson if hasattr(value, "geojson") else value
         else:
             geojson_value = ""
@@ -75,9 +58,12 @@ class BaseLeafletGeometryWidget(forms.Textarea):
         return context
 
 
-class LeafletPointWidget(BaseLeafletGeometryWidget):
+class GoogleMapsPointWidget(BaseGoogleMapsGeometryWidget):
     mode = "point"
 
 
-class LeafletRoadWidget(BaseLeafletGeometryWidget):
+class GoogleMapsRoadWidget(BaseGoogleMapsGeometryWidget):
     mode = "road"
+    
+class GoogleMapsSingleLineWidget(BaseGoogleMapsGeometryWidget):
+    mode = "single_line"

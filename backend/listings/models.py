@@ -76,3 +76,41 @@ class RouteCache(models.Model):
 
     class Meta:
         unique_together = ("boarding_house", "faculty", "profile")
+
+class RoadNode(models.Model):
+    """A point in the routable road network - an intersection, a dead
+    end, or any point where the walkable/drivable path changes shape.
+    This is the vertex set of the graph Dijkstra searches over."""
+
+    name = models.CharField(max_length=200, blank=True, help_text="Optional label, e.g. an intersection name")
+    geom = models.PointField(geography=True, srid=4326)
+
+    def __str__(self):
+        return self.name or f"Node #{self.pk}"
+
+
+class RoadEdge(models.Model):
+    """A drivable/walkable stretch of road connecting two RoadNodes -
+    the edge set of the graph. Treated as bidirectional (two-way)."""
+
+    from_node = models.ForeignKey(RoadNode, on_delete=models.CASCADE, related_name="edges_from")
+    to_node = models.ForeignKey(RoadNode, on_delete=models.CASCADE, related_name="edges_to")
+    # The actual shape of the road (can have bends, doesn't have to be a
+    # straight line between the two nodes) - used both for accurate
+    # distance and for drawing the real route on the map afterward.
+    geom = models.LineStringField(geography=True, srid=4326)
+
+    def save(self, *args, **kwargs):
+        # Force the line's endpoints to exactly match the chosen nodes,
+        # regardless of how precisely it was drawn - this is what
+        # guarantees the graph is actually connected at every junction.
+        from django.contrib.gis.geos import LineString
+
+        coords = list(self.geom.coords)
+        coords[0] = (self.from_node.geom.x, self.from_node.geom.y)
+        coords[-1] = (self.to_node.geom.x, self.to_node.geom.y)
+        self.geom = LineString(coords, srid=4326)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Edge #{self.pk}: {self.from_node} \u2194 {self.to_node}"

@@ -144,3 +144,4 @@ REST_FRAMEWORK = {
 # Project-specific settings
 # ---------------------------------------------------------------------
 OSRM_BASE_URL = os.getenv("OSRM_BASE_URL", "https://router.project-osrm.org")
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")

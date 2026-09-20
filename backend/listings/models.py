@@ -84,9 +84,10 @@ class RoadNode(models.Model):
 
     name = models.CharField(max_length=200, blank=True, help_text="Optional label, e.g. an intersection name")
     geom = models.PointField(geography=True, srid=4326)
-
-    def __str__(self):
-        return self.name or f"Node #{self.pk}"
+    # Set only for nodes auto-imported from OpenStreetMap (via osmnx) -
+    # lets re-running the import be idempotent instead of duplicating
+    # nodes. Manually-drawn nodes leave this blank.
+    osm_id = models.BigIntegerField(null=True, blank=True, unique=True, db_index=True)
 
 
 class RoadEdge(models.Model):

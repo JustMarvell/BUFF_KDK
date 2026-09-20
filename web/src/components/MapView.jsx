@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { APIProvider, Map, AdvancedMarker, Pin, Polyline, useMap } from "@vis.gl/react-google-maps";
+import { APIProvider, Map, AdvancedMarker, Pin, Polyline, Polygon, useMap } from "@vis.gl/react-google-maps";
 
 const CONDITION_COLOR = { good: "#3c8f5c", fair: "#d9a441", poor: "#c1483e" };
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -48,6 +48,40 @@ function RoadSegmentLayer({ roadSegments }) {
   });
 }
 
+function lerpColor(colorA, colorB, t) {
+  const a = parseInt(colorA.slice(1), 16);
+  const b = parseInt(colorB.slice(1), 16);
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `rgb(${r},${g},${bl})`;
+}
+
+function densityColor(normalized, metric) {
+  // road_condition: pale yellow -> red (severity). boarding_houses: pale blue -> deep blue (density).
+  return metric === "road_condition"
+    ? lerpColor("#fff3b0", "#c1483e", normalized)
+    : lerpColor("#dbe9ff", "#1b4f8c", normalized);
+}
+
+function HeatmapLayer({ heatmap }) {
+  if (!heatmap) return null;
+  return heatmap.features.map((f, i) => {
+    const ring = f.geometry.coordinates[0].map(([lng, lat]) => ({ lat, lng }));
+    return (
+      <Polygon
+        key={`heat-${i}`}
+        paths={ring}
+        strokeWeight={0}
+        fillColor={densityColor(f.properties.normalized, heatmap.metric)}
+        fillOpacity={0.55}
+      />
+    );
+  });
+}
+
 export default function MapView({
   center = { lat: 1.26667, lng: 124.88306 }, // Universitas Negeri Manado (UNIMA), Tondano
   zoom = 15,
@@ -55,6 +89,7 @@ export default function MapView({
   faculties = [],
   roadSegments,
   routeGeometry,
+  heatmap,
   onSelectBoardingHouse,
   fitToMarkers = false,
 }) {
@@ -84,6 +119,7 @@ export default function MapView({
         gestureHandling="greedy"
       >
         <RoadSegmentLayer roadSegments={roadSegments} />
+        <HeatmapLayer heatmap={heatmap} />
 
         {routePath && (
           <Polyline path={routePath} strokeColor="#2f5d50" strokeWeight={5} strokeOpacity={0.9} />

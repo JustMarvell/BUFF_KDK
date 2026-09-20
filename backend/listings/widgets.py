@@ -26,7 +26,7 @@ class BaseGoogleMapsGeometryWidget(forms.Textarea):
 
     class Media:
         js = (
-            f"https://maps.googleapis.com/maps/api/js?key={settings.GOOGLE_MAPS_API_KEY}&libraries=places,drawing",
+            f"https://maps.googleapis.com/maps/api/js?key={settings.GOOGLE_MAPS_API_KEY}&libraries=places",
         )
 
     def __init__(self, attrs=None, default_lat=UNIMA_LAT, default_lng=UNIMA_LNG, default_zoom=DEFAULT_ZOOM):

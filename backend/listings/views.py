@@ -1,7 +1,5 @@
 import json
 
-import requests
-from django.conf import settings
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import LineString
 from django.contrib.gis.measure import D
@@ -10,6 +8,8 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import BoardingHouse, Faculty, RoadSegment, RouteCache
+from .services.routing import SPEED_MPS, RouteNotFound, shortest_path
+from .services.heatmap import boarding_house_density, road_condition_density
 from .serializers import (
     BoardingHouseCreateSerializer,
     BoardingHouseSerializer,
@@ -193,10 +193,12 @@ class RouteView(APIView):
     """
     GET /api/route/?boarding_house_id=1&faculty_id=2&profile=walking
 
-    Calls OSRM for the actual road-network route, then finds
-    road_segments within 25m of that route (ST_DWithin via GeoDjango's
-    dwithin lookup) to overlay condition data - the "road condition as
-    a deciding factor" feature.
+    Computes the route using our own network analysis (Dijkstra's
+    algorithm over the RoadNode/RoadEdge graph, via NetworkX) - no
+    external routing service is called. Road condition overlay logic
+    (finding RoadSegment reports near the computed path) is unchanged
+    from the OSRM-based version, since it only cares about the final
+    route geometry, not how it was computed.
     """
 
     def get(self, request):
@@ -216,22 +218,14 @@ class RouteView(APIView):
         except Faculty.DoesNotExist:
             return Response({"error": "Faculty not found"}, status=404)
 
-        coords = f"{bh.geom.x},{bh.geom.y};{faculty.geom.x},{faculty.geom.y}"
-        url = f"{settings.OSRM_BASE_URL}/route/v1/{profile}/{coords}?overview=full&geometries=geojson"
-
         try:
-            resp = requests.get(url, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-        except requests.RequestException as e:
-            return Response({"error": "Failed to reach routing service", "details": str(e)}, status=502)
+            result = shortest_path(bh.geom, faculty.geom)
+        except RouteNotFound as e:
+            return Response({"error": str(e)}, status=422)
 
-        if data.get("code") != "Ok" or not data.get("routes"):
-            return Response({"error": f"OSRM could not find a route: {data.get('code', 'unknown error')}"}, status=502)
-
-        route = data["routes"][0]
-        geometry = route["geometry"]  # GeoJSON LineString dict
-        route_line = LineString([(c[0], c[1]) for c in geometry["coordinates"]], srid=4326)
+        route_line = LineString(result["coordinates"], srid=4326)
+        speed_mps = SPEED_MPS.get(profile, SPEED_MPS["driving"])
+        duration_s = result["distance_m"] / speed_mps
 
         nearby_segments = RoadSegment.objects.filter(geom__dwithin=(route_line, D(m=25)))
 
@@ -256,25 +250,61 @@ class RouteView(APIView):
         else:
             overall = "good"
 
-        # Best-effort cache upsert
         RouteCache.objects.update_or_create(
             boarding_house=bh,
             faculty=faculty,
             profile=profile,
             defaults={
-                "distance_m": route["distance"],
-                "duration_s": route["duration"],
+                "distance_m": result["distance_m"],
+                "duration_s": duration_s,
                 "geom": route_line,
             },
         )
 
         return Response(
             {
-                "distance_m": route["distance"],
-                "duration_s": route["duration"],
-                "geometry": geometry,
+                "distance_m": result["distance_m"],
+                "duration_s": duration_s,
+                "geometry": {"type": "LineString", "coordinates": result["coordinates"]},
                 "road_condition_overlay": overlay,
                 "overall_condition": overall,
                 "condition_breakdown": counts,
             }
         )
+        
+class HeatmapView(APIView):
+    """
+    GET /api/heatmap/?metric=boarding_houses|road_condition&cell_size_m=200
+
+    Grid-based spatial density analysis - divides the data's coverage
+    area into cells and returns each non-empty cell as a GeoJSON
+    Polygon, with a normalized 0-1 intensity value for coloring.
+    """
+
+    def get(self, request):
+        metric = request.query_params.get("metric", "boarding_houses")
+        cell_size = int(request.query_params.get("cell_size_m", 200))
+
+        if metric == "boarding_houses":
+            cells = boarding_house_density(cell_size)
+        elif metric == "road_condition":
+            cells = road_condition_density(cell_size)
+        else:
+            return Response({"error": "metric must be 'boarding_houses' or 'road_condition'"}, status=400)
+
+        max_value = max((c["value"] for c in cells), default=1)
+        features = []
+        for c in cells:
+            min_lng, min_lat, max_lng, max_lat = c["bbox"]
+            features.append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [min_lng, min_lat], [max_lng, min_lat],
+                        [max_lng, max_lat], [min_lng, max_lat], [min_lng, min_lat],
+                    ]],
+                },
+                "properties": {"value": c["value"], "normalized": c["value"] / max_value},
+            })
+        return Response({"type": "FeatureCollection", "features": features, "metric": metric})

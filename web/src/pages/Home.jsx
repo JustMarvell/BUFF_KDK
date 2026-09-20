@@ -10,6 +10,8 @@ export default function Home() {
   const [filters, setFilters] = useState({});
   const [boardingHouses, setBoardingHouses] = useState([]);
   const [hoveredId, setHoveredId] = useState(null);
+  const [heatmapMetric, setHeatmapMetric] = useState("none");
+  const [heatmap, setHeatmap] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -17,6 +19,15 @@ export default function Home() {
     api.getFaculties().then(setFaculties).catch((e) => setError(e.message));
     api.getRoadSegments().then(setRoadSegments).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (heatmapMetric === "none") {
+      setHeatmap(null);
+      return;
+    }
+    api.getHeatmap(heatmapMetric).then(setHeatmap).catch(() => setHeatmap(null));
+  }, [heatmapMetric]);
+
 
   const loadResults = useCallback(async () => {
     setLoading(true);
@@ -63,13 +74,25 @@ export default function Home() {
         ))}
       </aside>
 
-      <MapView
-        boardingHouses={boardingHouses}
-        faculties={faculties}
-        roadSegments={roadSegments}
-        fitToMarkers
-        onSelectBoardingHouse={setHoveredId}
-      />
+      <div style={{ position: "relative", height: "100%" }}>
+        <select
+          value={heatmapMetric}
+          onChange={(e) => setHeatmapMetric(e.target.value)}
+          style={{ position: "absolute", top: 10, left: 10, zIndex: 10, padding: "6px 10px", borderRadius: 6 }}
+        >
+          <option value="none">No heatmap</option>
+          <option value="boarding_houses">Boarding house density</option>
+          <option value="road_condition">Road condition severity</option>
+        </select>
+        <MapView
+          boardingHouses={boardingHouses}
+          faculties={faculties}
+          roadSegments={roadSegments}
+          heatmap={heatmap}
+          fitToMarkers
+          onSelectBoardingHouse={setHoveredId}
+        />
+      </div>
     </div>
   );
 }

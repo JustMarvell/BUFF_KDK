@@ -6,3 +6,5 @@ requests>=2.32
 python-dotenv>=1.0
 gunicorn>=22.0
 whitenoise>=6.7
+networkx>=3.3
+osmnx>=2.0

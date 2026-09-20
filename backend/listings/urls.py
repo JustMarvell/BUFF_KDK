@@ -9,4 +9,5 @@ urlpatterns = [
     path("boarding-houses/<int:pk>/", views.BoardingHouseDetailView.as_view()),
     path("road-segments/", views.RoadSegmentListView.as_view()),
     path("route/", views.RouteView.as_view()),
+    path("heatmap/", views.HeatmapView.as_view()),
 ]
